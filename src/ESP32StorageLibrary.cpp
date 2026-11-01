@@ -115,7 +115,8 @@ static bool storageFilesMatch(fs::FS &leftFs, const String &leftPath,
 bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
                                         int8_t misoPin, int8_t mosiPin,
                                         uint32_t frequency,
-                                        bool formatLittleFSOnFail) {
+                                        bool formatLittleFSOnFail,
+                                        SPIClass *sdSPI) {
   if (_hostSessionActive) {
     _lastError = "Cannot reinitialize storage during an active host session.";
     return false;
@@ -125,6 +126,7 @@ bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
   _misoPin = misoPin;
   _mosiPin = mosiPin;
   _frequency = frequency;
+  _sharedSPI = sdSPI;
   _started = true;
   _lastError = "";
 
@@ -134,7 +136,9 @@ bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
     _lastError = LittleFS.lastError();
 
   ::SD.end();
-  _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+  _sdReady = _sharedSPI
+                 ? SD.begin(_csPin, *_sharedSPI, _frequency)
+                 : SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
   if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
     _lastError = SD.lastError();
     ::SD.end();
@@ -171,7 +175,9 @@ bool ESP32StorageBackends::refreshSD() {
 
   if (!_sdReady && (uint32_t)(millis() - _lastSdAttempt) >= FALLBACK_SD_RETRY_MS) {
     _lastSdAttempt = millis();
-    _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+    _sdReady = _sharedSPI
+                   ? SD.begin(_csPin, *_sharedSPI, _frequency)
+                   : SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
     if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
       _lastError = SD.lastError();
       markSDUnavailable();

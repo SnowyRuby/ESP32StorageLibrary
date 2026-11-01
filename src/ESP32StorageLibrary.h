@@ -66,7 +66,8 @@ struct ESP32StorageBackends {
   // formatLittleFSOnFail is explicitly true. Returns true if either mounts.
   bool beginStorage(uint8_t csPin, int8_t sckPin, int8_t misoPin, int8_t mosiPin,
                     uint32_t frequency = 4000000,
-                    bool formatLittleFSOnFail = false);
+                    bool formatLittleFSOnFail = false,
+                    SPIClass *sdSPI = nullptr);
   // Saves one record to SD, or queues it in LittleFS while SD is unavailable.
   // Each call creates its own .dat record under /StorageLibraryBackup on SD.
   bool writeWithFallback(const String &data);
@@ -92,6 +93,7 @@ private:
   int8_t _misoPin = 19;
   int8_t _mosiPin = 23;
   uint32_t _frequency = 4000000;
+  SPIClass *_sharedSPI = nullptr;
   uint32_t _lastSdAttempt = 0;
   String _lastError;
 
