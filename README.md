@@ -17,7 +17,7 @@ void setup() {
 }
 ```
 
-The `begin()` pin order is chip select, clock, MISO, MOSI. Change the example pins to match your wiring.
+The `begin()` pin order is chip select, clock, MISO, MOSI. Change the example pins to match your wiring. To mount SD using an SPI bus initialized elsewhere, call `StorageLibrary.SD.begin(cs, spi, frequency)`; the library does not reconfigure that caller-owned bus.
 
 The library also exposes named built-in instances: use `StorageLibrary.SD.begin(cs, sck, miso, mosi)` for SD, or `StorageLibrary.LittleFS.begin()` for internal flash. `StorageLibrary.SD.end()` unmounts SD so it can be mounted again cleanly after removal. LittleFS mounting does not format by default; `StorageLibrary.LittleFS.begin(true)` opts into formatting the LittleFS partition if mounting fails, which erases its contents. The original `ESP32Storage` SD instance remains available.
 

@@ -377,6 +377,14 @@ bool ESP32StorageLibrary::begin(uint8_t csPin, int8_t sckPin, int8_t misoPin,
   return true;
 }
 
+bool ESP32StorageLibrary::begin(uint8_t csPin, SPIClass &spi,
+                                uint32_t frequency) {
+  if (!::SD.begin(csPin, spi, frequency))
+    return setError("SD mount failed; check the SPI bus, CS pin, and frequency.");
+  _lastError = "";
+  return true;
+}
+
 bool ESP32StorageLibrary::end() {
   if (&_fs != static_cast<fs::FS *>(&::SD))
     return setError("end() is only available for the SD filesystem.");
