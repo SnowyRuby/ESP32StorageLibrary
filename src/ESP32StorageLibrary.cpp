@@ -193,7 +193,13 @@ bool ESP32StorageBackends::beginHostSession() {
     return false;
   }
   if (_hostSessionActive) return true;
-  if (!syncBackup()) return false;
+  // When SD is unavailable, LittleFS remains usable for PC file access. Keep
+  // the host-session gate active so sensor records continue queueing safely.
+  if (!_littleFsReady) {
+    _lastError = "LittleFS is unavailable; a safe host session cannot start.";
+    return false;
+  }
+  if (refreshSD() && !syncBackup()) return false;
   _hostSessionActive = true;
   _lastError = "";
   return true;
@@ -209,6 +215,12 @@ bool ESP32StorageBackends::endHostSession() {
   // serial session. If it fails, later syncBackup()/writeWithFallback() calls
   // can retry normally.
   _lastSdAttempt = millis() - FALLBACK_SD_RETRY_MS;
+  // Leave queued sensor records intact when there is no SD card to receive
+  // them. A later syncBackup() will replay them once SD is available.
+  if (!refreshSD()) {
+    _lastError = "SD is unavailable; queued records remain safely in LittleFS.";
+    return _littleFsReady;
+  }
   return syncBackup();
 }
 
