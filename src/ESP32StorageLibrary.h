@@ -11,6 +11,8 @@ public:
   ESP32StorageLibrary();
   bool begin(uint8_t csPin, int8_t sckPin, int8_t misoPin, int8_t mosiPin,
              uint32_t frequency = 4000000);
+  // Mounts SD using a caller-initialized SPI bus shared with another device.
+  bool begin(uint8_t csPin, SPIClass &spi, uint32_t frequency = 4000000);
   // Unmounts the built-in SD filesystem so it can be mounted again cleanly.
   bool end();
   // Mounts LittleFS when this instance is bound to LittleFS. Formatting is

@@ -137,15 +137,9 @@ bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
 
   ::SD.end();
   if (_sdSPI) {
-    _sdSPI->begin(_sckPin, _misoPin, _mosiPin, _csPin);
     _sdReady = ::SD.begin(_csPin, *_sdSPI, _frequency);
   } else {
-    if (_sdSPI) {
-      _sdSPI->begin(_sckPin, _misoPin, _mosiPin, _csPin);
-      _sdReady = ::SD.begin(_csPin, *_sdSPI, _frequency);
-    } else {
-      _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
-    }
+    _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
   }
   if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
     _lastError = SD.lastError();
@@ -183,7 +177,8 @@ bool ESP32StorageBackends::refreshSD() {
 
   if (!_sdReady && (uint32_t)(millis() - _lastSdAttempt) >= FALLBACK_SD_RETRY_MS) {
     _lastSdAttempt = millis();
-    _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+    _sdReady = _sdSPI ? ::SD.begin(_csPin, *_sdSPI, _frequency)
+                      : SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
     if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
       _lastError = SD.lastError();
       markSDUnavailable();
@@ -379,6 +374,14 @@ bool ESP32StorageLibrary::begin(uint8_t csPin, int8_t sckPin, int8_t misoPin,
   SPI.begin(sckPin, misoPin, mosiPin, csPin);
   if (!SD.begin(csPin, SPI, frequency))
     return setError("SD mount failed; check CS, SCK, MISO, and MOSI pins.");
+  _lastError = "";
+  return true;
+}
+
+bool ESP32StorageLibrary::begin(uint8_t csPin, SPIClass &spi,
+                                uint32_t frequency) {
+  if (!::SD.begin(csPin, spi, frequency))
+    return setError("SD mount failed; check the SPI bus, CS pin, and frequency.");
   _lastError = "";
   return true;
 }
