@@ -83,9 +83,3 @@ Open Serial Monitor at 115200 baud to see the test results. Change the CS, SCK, 
 ## Compatibility
 
 Target: ESP32 Arduino core 3.x. Uses Arduino `FS`, `SD`, and `SPI` APIs.
-
-## GitHub repository and updates
-
-The source code is hosted at [github.com/SnowyRuby/ESP32StorageLibrary](https://github.com/SnowyRuby/ESP32StorageLibrary). The Arduino Library Manager metadata also links to this repository.
-
-Changes in a local copy are not uploaded automatically. To publish an update, commit your changes and push them to the repository's `main` branch, or upload the updated files through GitHub. You need write access to this private repository.
