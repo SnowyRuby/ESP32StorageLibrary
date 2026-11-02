@@ -17,17 +17,19 @@ void setup() {
 }
 ```
 
-The `begin()` pin order is chip select, clock, MISO, MOSI. Change the example pins to match your wiring. To mount SD using an SPI bus initialized elsewhere, call `StorageLibrary.SD.begin(cs, spi, frequency)`; the library does not reconfigure that caller-owned bus.
+The `begin()` pin order is chip select, clock, MISO, MOSI. Change the example pins to match your wiring.
 
 The library also exposes named built-in instances: use `StorageLibrary.SD.begin(cs, sck, miso, mosi)` for SD, or `StorageLibrary.LittleFS.begin()` for internal flash. `StorageLibrary.SD.end()` unmounts SD so it can be mounted again cleanly after removal. LittleFS mounting does not format by default; `StorageLibrary.LittleFS.begin(true)` opts into formatting the LittleFS partition if mounting fails, which erases its contents. The original `ESP32Storage` SD instance remains available.
 
-For applications that need SD/LittleFS failover, call `StorageLibrary.beginStorage(cs, sck, miso, mosi)` once, then `StorageLibrary.writeWithFallback(data)` for each record. When another device such as a TFT already owns the SPI bus, initialize that bus in your sketch and pass its pointer as the final argument with `StorageLibrary.beginStorage(cs, sck, miso, mosi, frequency, false, &spi)`; the library uses the supplied bus for the initial SD mount and later SD retries without reconfiguring its pins. The original pin-based call remains available. It writes each record as a separate `.dat` file under `/StorageLibraryBackup` on SD; if SD is unavailable, it queues the record in LittleFS. Call `StorageLibrary.syncBackup()` periodically to retry the SD connection and transfer queued files. A queued LittleFS file is removed only after its SD copy is verified. `StorageLibrary.isSDReady()` and `StorageLibrary.isLittleFSReady()` report mount status. This function is for records, not for writing to an arbitrary destination path.
+For applications that need SD/LittleFS failover, call `StorageLibrary.beginStorage(cs, sck, miso, mosi)` once, then `StorageLibrary.writeWithFallback(data)` for each record. It writes each record as a separate `.dat` file under `/StorageLibraryBackup` on SD; if SD is unavailable, it queues the record in LittleFS. Call `StorageLibrary.syncBackup()` periodically to retry the SD connection and transfer queued files. A queued LittleFS file is removed only after its SD copy is verified. `StorageLibrary.isSDReady()` and `StorageLibrary.isLittleFSReady()` report mount status. This function is for records, not for writing to an arbitrary destination path.
 
 For a PC file-transfer session over USB serial, call `StorageLibrary.beginHostSession()` before handling PC commands. It first syncs queued records, then pauses automatic SD remount/replay. SD stays mounted so the ESP32 serial command handler can list, read, and write PC-requested files. Calls to `writeWithFallback(data)` during the session go to LittleFS. After the PC session ends, call `StorageLibrary.endHostSession()` to resume queue sync. If SD is unavailable at that point, the queue remains in LittleFS and later `syncBackup()` or `writeWithFallback()` calls can retry. Use `StorageLibrary.SD` directly only for the serial file commands while the session is active; ordinary application writes should go through `writeWithFallback()`.
 
 ## Copy files between a PC and the ESP32
 
 To browse the SD card from a PC and copy files or folders over the board's USB serial COM port, install the separate **ESP32PcSession** Arduino library as well as this library. `ESP32StorageLibrary` provides the session-aware LittleFS fallback; `ESP32PcSession` provides the serial server and transfer protocol. The matching Windows app and firmware example are in the ESP32 Serial File Manager project. The ESP32 does not appear as a Windows drive; use the companion app.
+
+`ESP32StorageLibrary` also provides `copyPath(source, destination)`, `renamePath(source, destination)`, and `movePath(source, destination)` for operations within the same mounted filesystem. Rename keeps the item in its current folder and changes its name; move changes folders while keeping the item's name. `ESP32PcSession` exposes these as `COPY`, `RENAME`, and `MOVE` protocol requests, so copying or moving stays on the ESP32 and does not route file data through the PC. Copying is recursive and refuses to overwrite an existing destination.
 
 ## Hardware testing
 
@@ -41,6 +43,9 @@ This library has only been tested on the **ESP32 Dev Module**. Other ESP32 board
 - `overwriteFile()` replaces a file's contents or creates the file.
 - `deleteFile()` removes a file.
 - `deleteFolder()` recursively removes a folder and its contents.
+- `copyPath()` copies a file or folder tree without overwriting an existing destination.
+- `renamePath()` changes a file or folder's name in its current folder without overwriting an existing destination.
+- `movePath()` moves a file or folder to another folder while keeping its name and without overwriting an existing destination.
 - `wipeSDCard()` removes every file and folder from the mounted SD card.
 - `archiveFolder()` creates a ZIP using Store mode (no compression).
 - `archiveFolderCompressed()` creates a ZIP using DEFLATE compression.
@@ -51,7 +56,7 @@ Both archive functions remove the source folder after a successful archive. ZIP 
 
 ## Install
 
-In Arduino IDE, choose **Sketch → Include Library → Add .ZIP Library...** and select `ESP32StorageLibrary.zip`. Then open **File → Examples → ESP32StorageLibrary**.
+In Arduino IDE, choose **Sketch → Include Library → Add .ZIP Library...** and select either `ESP32StorageLibrary.zip` or `ESP32StorageLibrary-Arduino.zip` (each archive contains one top-level `ESP32StorageLibrary` folder). Then open **File → Examples → ESP32StorageLibrary**.
 
 ## Examples and storage cleanup
 
@@ -59,7 +64,7 @@ The SD test examples **BasicTestSD**, **SDCardCheck**, **ZipRoundTripStore**, **
 
 - **BasicTestSD** exercises folder creation, file creation, append, overwrite, and Store-mode archiving on an SD card.
 - **BasicTestLittleFS** runs the same basic operations using LittleFS on internal flash and cleans up only its own test folder.
-- **SharedSPIStorage** demonstrates SD/LittleFS fallback with a caller-initialized, shared SPI bus. Replace the example `sharedSPI` object with the SPI instance already used by your display.
+- **SharedSPIStorage** demonstrates how to use a caller-initialized SPI bus shared with a display.
 - **SDLittleFSFallback** demonstrates the library's `beginStorage()`, `writeWithFallback()`, and `syncBackup()` API. It queues sample records in LittleFS while SD is unavailable, then transfers and verifies them on SD when it returns before clearing the LittleFS queue.
 - **SDCardCheck** checks SD mounting and basic file write, append, read-back, and delete operations.
 - **ZipRoundTripStore** creates a ZIP without compression, extracts it, and compares the restored file with the original.

@@ -11,8 +11,6 @@ public:
   ESP32StorageLibrary();
   bool begin(uint8_t csPin, int8_t sckPin, int8_t misoPin, int8_t mosiPin,
              uint32_t frequency = 4000000);
-  // Mounts SD using a caller-initialized SPI bus shared with another device.
-  bool begin(uint8_t csPin, SPIClass &spi, uint32_t frequency = 4000000);
   // Unmounts the built-in SD filesystem so it can be mounted again cleanly.
   bool end();
   // Mounts LittleFS when this instance is bound to LittleFS. Formatting is
@@ -31,6 +29,12 @@ public:
   bool overwriteFile(const String &path, const String &contents);
   bool deleteFile(const String &path);
   bool deleteFolder(const String &path);
+  // Copies files or folders within this filesystem. The destination must not exist.
+  bool copyPath(const String &sourcePath, const String &destinationPath);
+  // Renames a file or folder within its current folder. The destination must not exist.
+  bool renamePath(const String &sourcePath, const String &destinationPath);
+  // Moves a file or folder to another folder while keeping its name. Destination must not exist.
+  bool movePath(const String &sourcePath, const String &destinationPath);
 
   // Permanently deletes every file and folder on the mounted filesystem.
   bool wipeSDCard();
@@ -95,7 +99,7 @@ private:
   int8_t _misoPin = 19;
   int8_t _mosiPin = 23;
   uint32_t _frequency = 4000000;
-  SPIClass *_sharedSPI = nullptr;
+  SPIClass *_sdSPI = nullptr;
   uint32_t _lastSdAttempt = 0;
   String _lastError;
 

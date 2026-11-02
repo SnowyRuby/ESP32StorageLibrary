@@ -126,7 +126,7 @@ bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
   _misoPin = misoPin;
   _mosiPin = mosiPin;
   _frequency = frequency;
-  _sharedSPI = sdSPI;
+  _sdSPI = sdSPI;
   _started = true;
   _lastError = "";
 
@@ -136,9 +136,17 @@ bool ESP32StorageBackends::beginStorage(uint8_t csPin, int8_t sckPin,
     _lastError = LittleFS.lastError();
 
   ::SD.end();
-  _sdReady = _sharedSPI
-                 ? SD.begin(_csPin, *_sharedSPI, _frequency)
-                 : SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+  if (_sdSPI) {
+    _sdSPI->begin(_sckPin, _misoPin, _mosiPin, _csPin);
+    _sdReady = ::SD.begin(_csPin, *_sdSPI, _frequency);
+  } else {
+    if (_sdSPI) {
+      _sdSPI->begin(_sckPin, _misoPin, _mosiPin, _csPin);
+      _sdReady = ::SD.begin(_csPin, *_sdSPI, _frequency);
+    } else {
+      _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+    }
+  }
   if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
     _lastError = SD.lastError();
     ::SD.end();
@@ -175,9 +183,7 @@ bool ESP32StorageBackends::refreshSD() {
 
   if (!_sdReady && (uint32_t)(millis() - _lastSdAttempt) >= FALLBACK_SD_RETRY_MS) {
     _lastSdAttempt = millis();
-    _sdReady = _sharedSPI
-                   ? SD.begin(_csPin, *_sharedSPI, _frequency)
-                   : SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
+    _sdReady = SD.begin(_csPin, _sckPin, _misoPin, _mosiPin, _frequency);
     if (_sdReady && !SD.createFolder(FALLBACK_SD_FOLDER)) {
       _lastError = SD.lastError();
       markSDUnavailable();
@@ -377,14 +383,6 @@ bool ESP32StorageLibrary::begin(uint8_t csPin, int8_t sckPin, int8_t misoPin,
   return true;
 }
 
-bool ESP32StorageLibrary::begin(uint8_t csPin, SPIClass &spi,
-                                uint32_t frequency) {
-  if (!::SD.begin(csPin, spi, frequency))
-    return setError("SD mount failed; check the SPI bus, CS pin, and frequency.");
-  _lastError = "";
-  return true;
-}
-
 bool ESP32StorageLibrary::end() {
   if (&_fs != static_cast<fs::FS *>(&::SD))
     return setError("end() is only available for the SD filesystem.");
@@ -481,6 +479,135 @@ bool ESP32StorageLibrary::deleteFolder(const String &path) {
   for (const String &p : dirs) if (!deleteFolder(p)) return false;
   for (const String &p : files) if (!_fs.remove(p)) return setError("Could not delete file: " + p);
   return _fs.rmdir(path) || setError("Could not remove folder: " + path);
+}
+
+namespace {
+bool copyStorageEntry(fs::FS &fs, const String &sourcePath,
+                      const String &destinationPath, String &error) {
+  File source = fs.open(sourcePath, FILE_READ);
+  if (!source) { error = "Could not open source: " + sourcePath; return false; }
+  const bool isDirectory = source.isDirectory();
+  source.close();
+  if (!isDirectory) {
+    File input = fs.open(sourcePath, FILE_READ);
+    File output = fs.open(destinationPath, FILE_WRITE);
+    if (!input || !output) {
+      if (input) input.close();
+      if (output) output.close();
+      error = "Could not open a file for copying.";
+      return false;
+    }
+    uint8_t buffer[512];
+    bool ok = true;
+    while (input.available()) {
+      const size_t count = input.read(buffer, sizeof(buffer));
+      if (count == 0 || output.write(buffer, count) != count) { ok = false; break; }
+    }
+    output.flush();
+    input.close();
+    output.close();
+    if (!ok) { error = "File copy was incomplete."; return false; }
+    return true;
+  }
+
+  if (!fs.mkdir(destinationPath)) {
+    error = "Could not create destination folder: " + destinationPath;
+    return false;
+  }
+  File folder = fs.open(sourcePath, FILE_READ);
+  if (!folder || !folder.isDirectory()) {
+    if (folder) folder.close();
+    error = "Could not read source folder: " + sourcePath;
+    return false;
+  }
+  while (true) {
+    File child = folder.openNextFile();
+    if (!child) break;
+    String name = String(child.name());
+    const int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    child.close();
+    const String childSource = sourcePath + "/" + name;
+    const String childDestination = destinationPath + "/" + name;
+    if (!copyStorageEntry(fs, childSource, childDestination, error)) {
+      folder.close();
+      return false;
+    }
+  }
+  folder.close();
+  return true;
+}
+}
+
+bool ESP32StorageLibrary::copyPath(const String &sourcePath,
+                                   const String &destinationPath) {
+  if (!sourcePath.length() || !destinationPath.length() || sourcePath == "/" ||
+      destinationPath == "/" || sourcePath == destinationPath)
+    return setError("Invalid source or destination path.");
+  if (!_fs.exists(sourcePath)) return setError("Copy source does not exist.");
+  if (_fs.exists(destinationPath)) return setError("Copy destination already exists.");
+  if (destinationPath.startsWith(sourcePath + "/"))
+    return setError("A folder cannot be copied into itself.");
+  String error;
+  if (!copyStorageEntry(_fs, sourcePath, destinationPath, error)) {
+    // A failed recursive copy may leave a partial destination; remove it.
+    if (_fs.exists(destinationPath)) {
+      File destination = _fs.open(destinationPath, FILE_READ);
+      const bool isDirectory = destination && destination.isDirectory();
+      if (destination) destination.close();
+      if (isDirectory) deleteFolder(destinationPath);
+      else _fs.remove(destinationPath);
+    }
+    return setError(error);
+  }
+  _lastError = "";
+  return true;
+}
+
+bool ESP32StorageLibrary::renamePath(const String &sourcePath,
+                                     const String &destinationPath) {
+  if (!sourcePath.length() || !destinationPath.length() || sourcePath == "/" ||
+      destinationPath == "/" || sourcePath == destinationPath)
+    return setError("Invalid source or destination path.");
+  if (!_fs.exists(sourcePath)) return setError("Rename source does not exist.");
+  if (_fs.exists(destinationPath)) return setError("Rename destination already exists.");
+  const int sourceSlash = sourcePath.lastIndexOf('/');
+  const int destinationSlash = destinationPath.lastIndexOf('/');
+  const String sourceParent = sourceSlash <= 0 ? "/" : sourcePath.substring(0, sourceSlash);
+  const String destinationParent = destinationSlash <= 0 ? "/" : destinationPath.substring(0, destinationSlash);
+  if (sourceParent != destinationParent)
+    return setError("Rename must stay in the current folder; use movePath() to change folders.");
+  if (destinationPath.startsWith(sourcePath + "/"))
+    return setError("A folder cannot be moved into itself.");
+  if (!_fs.rename(sourcePath, destinationPath))
+    return setError("Filesystem could not rename the path.");
+  _lastError = "";
+  return true;
+}
+
+bool ESP32StorageLibrary::movePath(const String &sourcePath,
+                                   const String &destinationPath) {
+  if (!sourcePath.length() || !destinationPath.length() || sourcePath == "/" ||
+      destinationPath == "/" || sourcePath == destinationPath)
+    return setError("Invalid source or destination path.");
+  if (!_fs.exists(sourcePath)) return setError("Move source does not exist.");
+  if (_fs.exists(destinationPath)) return setError("Move destination already exists.");
+  const int sourceSlash = sourcePath.lastIndexOf('/');
+  const int destinationSlash = destinationPath.lastIndexOf('/');
+  const String sourceParent = sourceSlash <= 0 ? "/" : sourcePath.substring(0, sourceSlash);
+  const String destinationParent = destinationSlash <= 0 ? "/" : destinationPath.substring(0, destinationSlash);
+  if (sourceParent == destinationParent)
+    return setError("Move must change folders; use renamePath() to change the name.");
+  const String sourceName = sourcePath.substring(sourceSlash + 1);
+  const String destinationName = destinationPath.substring(destinationSlash + 1);
+  if (!sourceName.equalsIgnoreCase(destinationName))
+    return setError("Move must keep the item's name unchanged.");
+  if (destinationPath.startsWith(sourcePath + "/"))
+    return setError("A folder cannot be moved into itself.");
+  if (!_fs.rename(sourcePath, destinationPath))
+    return setError("Filesystem could not move the path.");
+  _lastError = "";
+  return true;
 }
 
 bool ESP32StorageLibrary::wipeSDCard() {
