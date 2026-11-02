@@ -23,7 +23,7 @@ The library also exposes named built-in instances: use `StorageLibrary.SD.begin(
 
 For applications that need SD/LittleFS failover, call `StorageLibrary.beginStorage(cs, sck, miso, mosi)` once, then `StorageLibrary.writeWithFallback(data)` for each record. When another device such as a TFT already owns the SPI bus, initialize that bus in your sketch and pass its pointer as the final argument with `StorageLibrary.beginStorage(cs, sck, miso, mosi, frequency, false, &spi)`; the library uses the supplied bus for the initial SD mount and later SD retries without reconfiguring its pins. The original pin-based call remains available. It writes each record as a separate `.dat` file under `/StorageLibraryBackup` on SD; if SD is unavailable, it queues the record in LittleFS. Call `StorageLibrary.syncBackup()` periodically to retry the SD connection and transfer queued files. A queued LittleFS file is removed only after its SD copy is verified. `StorageLibrary.isSDReady()` and `StorageLibrary.isLittleFSReady()` report mount status. This function is for records, not for writing to an arbitrary destination path.
 
-For a PC file-transfer session over USB serial, call `StorageLibrary.beginHostSession()` before handling PC commands. It first syncs queued records, then pauses automatic SD remount/replay. SD stays mounted so the ESP32 serial command handler can list, read, and write PC-requested files. Calls to `writeWithFallback(data)` during the session go to LittleFS. After the PC session ends, call `StorageLibrary.endHostSession()` to resume queue sync. If SD is unavailable at that point, the queue remains in LittleFS and later `syncBackup()` or `writeWithFallback()` calls can retry. Use `StorageLibrary.SD` directly only for the serial file commands while the session is active; ordinary application writes should go through `writeWithFallback()`.
+For a PC file-transfer session over USB serial, call `StorageLibrary.beginHostSession()` before handling PC commands. It syncs queued records when SD is available, then pauses automatic SD remount/replay. The serial file server can browse both SD and LittleFS, including LittleFS-only setups. Calls to `writeWithFallback(data)` during the session go to LittleFS. Keep the `/StorageLibraryQueue` folder private to this library; the companion file server hides and protects it. After the PC session ends, call `StorageLibrary.endHostSession()` to resume queue sync. If SD is unavailable at that point, the queue remains in LittleFS and later `syncBackup()` or `writeWithFallback()` calls can retry. Use the relevant `StorageLibrary.SD` or `StorageLibrary.LittleFS` backend for PC file commands while the session is active; ordinary sensor-record writes should go through `writeWithFallback()`.
 
 ## Copy files between a PC and the ESP32
 
@@ -56,7 +56,7 @@ Both archive functions remove the source folder after a successful archive. ZIP 
 
 ## Install
 
-In Arduino IDE, choose **Sketch → Include Library → Add .ZIP Library...** and select either `ESP32StorageLibrary.zip` or `ESP32StorageLibrary-Arduino.zip` (each archive contains one top-level `ESP32StorageLibrary` folder). Then open **File → Examples → ESP32StorageLibrary**.
+In Arduino IDE, choose **Sketch → Include Library → Add .ZIP Library...** and select `ESP32StorageLibrary.zip` (the archive contains one top-level `ESP32StorageLibrary` folder). Then open **File → Examples → ESP32StorageLibrary**.
 
 ## Examples and storage cleanup
 
