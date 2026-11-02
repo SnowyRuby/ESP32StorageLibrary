@@ -27,7 +27,7 @@ For a PC file-transfer session over USB serial, call `StorageLibrary.beginHostSe
 
 ## Copy files between a PC and the ESP32
 
-To browse the SD card from a PC and copy files or folders over the board's USB serial COM port, install the separate **ESP32PcSession** Arduino library as well as this library. `ESP32StorageLibrary` provides the session-aware LittleFS fallback; `ESP32PcSession` provides the serial server and transfer protocol. The matching Windows app and firmware example are in the ESP32 Serial File Manager project. The ESP32 does not appear as a Windows drive; use the companion app.
+To browse the SD card from a PC and copy files or folders over the board's USB serial COM port, install the separate [**ESP32PcSession** Arduino library](https://github.com/SnowyRuby/ESP32PcSession) as well as this library. `ESP32StorageLibrary` provides the session-aware LittleFS fallback; `ESP32PcSession` provides the serial server and transfer protocol. The matching Windows app and firmware example are in the ESP32 Serial File Manager project. The ESP32 does not appear as a Windows drive; use the companion app.
 
 `ESP32StorageLibrary` also provides `copyPath(source, destination)`, `renamePath(source, destination)`, and `movePath(source, destination)` for operations within the same mounted filesystem. Rename keeps the item in its current folder and changes its name; move changes folders while keeping the item's name. `ESP32PcSession` exposes these as `COPY`, `RENAME`, and `MOVE` protocol requests, so copying or moving stays on the ESP32 and does not route file data through the PC. Copying is recursive and refuses to overwrite an existing destination.
 
