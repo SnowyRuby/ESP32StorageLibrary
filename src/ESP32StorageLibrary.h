@@ -81,11 +81,14 @@ struct ESP32StorageBackends {
   bool writeWithFallback(const String &data);
   // Flushes queued records and starts a serial host session. SD remains
   // mounted for host file commands; writeWithFallback() queues app records.
-  bool beginHostSession();
+  bool beginHostSession(bool deferQueueReplay = false);
+  // Prevent queued sensor-record replay while a resumable transfer is pending.
+  void deferQueueReplay(bool defer) { _queueReplayDeferred = defer; }
   // Ends the host session and resumes queued-record replay to SD.
+  // If SD is unavailable, queued records remain in LittleFS for later retry.
   bool endHostSession();
   // Checks the SD mount and copies queued LittleFS records back to SD.
-  bool syncBackup();
+  bool syncBackup(bool allowHostSession = false);
   bool isSDReady() const { return _sdReady; }
   bool isLittleFSReady() const { return _littleFsReady; }
   bool isHostSessionActive() const { return _hostSessionActive; }
@@ -96,6 +99,7 @@ private:
   bool _littleFsReady = false;
   bool _started = false;
   bool _hostSessionActive = false;
+  bool _queueReplayDeferred = false;
   uint8_t _csPin = 5;
   int8_t _sckPin = 18;
   int8_t _misoPin = 19;

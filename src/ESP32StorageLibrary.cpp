@@ -187,7 +187,7 @@ bool ESP32StorageBackends::refreshSD() {
   return _sdReady;
 }
 
-bool ESP32StorageBackends::beginHostSession() {
+bool ESP32StorageBackends::beginHostSession(bool deferQueueReplay) {
   if (!_started) {
     _lastError = "Call StorageLibrary.beginStorage() before starting a host session.";
     return false;
@@ -199,7 +199,8 @@ bool ESP32StorageBackends::beginHostSession() {
     _lastError = "LittleFS is unavailable; a safe host session cannot start.";
     return false;
   }
-  if (refreshSD() && !syncBackup()) return false;
+  if (!deferQueueReplay && refreshSD() && !syncBackup()) return false;
+  _queueReplayDeferred = deferQueueReplay;
   _hostSessionActive = true;
   _lastError = "";
   return true;
@@ -211,6 +212,7 @@ bool ESP32StorageBackends::endHostSession() {
     return false;
   }
   _hostSessionActive = false;
+  _queueReplayDeferred = false;
   // Force an immediate remount attempt if the SD card was removed during the
   // serial session. If it fails, later syncBackup()/writeWithFallback() calls
   // can retry normally.
@@ -305,8 +307,12 @@ bool ESP32StorageBackends::transferQueuedRecord(const String &sourcePath) {
   return true;
 }
 
-bool ESP32StorageBackends::syncBackup() {
-  if (_hostSessionActive) {
+bool ESP32StorageBackends::syncBackup(bool allowHostSession) {
+  if (_queueReplayDeferred) {
+    _lastError = "Backup replay is deferred until the pending transfer is resolved.";
+    return false;
+  }
+  if (_hostSessionActive && !allowHostSession) {
     _lastError = "Backup replay is paused during the active host session.";
     return false;
   }
@@ -352,7 +358,7 @@ bool ESP32StorageBackends::syncBackup() {
 }
 
 bool ESP32StorageBackends::writeWithFallback(const String &data) {
-  if (_hostSessionActive) return queueBackupRecord(data);
+  if (_hostSessionActive || _queueReplayDeferred) return queueBackupRecord(data);
   bool wasSDReady = _sdReady;
   bool cardReady = refreshSD();
   // If this call detected that the card just returned, queue the current
