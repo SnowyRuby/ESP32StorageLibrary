@@ -2,6 +2,8 @@
 
 An Arduino library for ESP32 projects using the built-in SD card over SPI.
 
+AI disclosure: This project was made with AI assistance (ChatGPT/Codex).
+
 The compiled library version is available as `ESP32_STORAGE_LIBRARY_VERSION` or through `StorageLibrary.version()`. These values come from the library header and are suitable for reporting in firmware handshakes. Keep the version macros and `library.properties` version in sync when preparing a release.
 
 ## Quick start
