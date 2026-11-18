@@ -4,6 +4,10 @@
 #include <SD.h>
 #include <SPI.h>
 #include <esp_system.h>
+#define ESP32_STORAGE_LIBRARY_VERSION "0.8.0"
+#define ESP32_STORAGE_LIBRARY_VERSION_MAJOR 0
+#define ESP32_STORAGE_LIBRARY_VERSION_MINOR 8
+#define ESP32_STORAGE_LIBRARY_VERSION_PATCH 0
 
 class ESP32StorageLibrary {
 public:
@@ -69,6 +73,7 @@ struct ESP32StorageBackends {
   ESP32StorageLibrary SD;
   ESP32StorageLibrary LittleFS;
   ESP32StorageBackends();
+  static constexpr const char *version() { return ESP32_STORAGE_LIBRARY_VERSION; }
 
   // Starts both built-in filesystems. LittleFS is never formatted unless
   // formatLittleFSOnFail is explicitly true. Returns true if either mounts.
